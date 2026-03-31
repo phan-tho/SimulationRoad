@@ -43,17 +43,24 @@ class NetworkListener:
         self.process_message(msg.payload.decode())
 
     def process_message(self, payload):
+        print("Hello, I am processor")
         try:
             data = json.loads(payload)
             print(f"Received command: {data}")
-            if data['type'] == 'traffic_light':
+            if data['type'] == 'UPDATE_INTERSECTION_STATE':
                 intersection_id = data['intersection_id']
                 new_state = data['state']
-                self.global_state['traffic_lights'][intersection_id].update_state(new_state)
+
+                print(f"Updating intersection {intersection_id} with new state: {new_state}")
+
+                # Tìm đúng ngã tư và cập nhật
+                if 0 <= intersection_id < len(self.global_state['intersections']):
+                    self.global_state['intersections'][intersection_id].update_state(new_state)
             elif data['type'] == 'lane_shift':
                 road_id = data['road_id']
                 new_ratio = data['ratio']
-                self.global_state['dynamic_dividers'][road_id].shift_divider(new_ratio)
+                if road_id in self.global_state['dynamic_dividers']:
+                    self.global_state['dynamic_dividers'][road_id].shift_divider(new_ratio)
         except json.JSONDecodeError:
             print("Error decoding JSON")
         except KeyError as e:

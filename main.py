@@ -1,70 +1,75 @@
 import pygame
 from simulation.config import config
 from simulation.controller import SimulationController
-from simulation.entities.traffic_light import TrafficLight
+from simulation.entities.traffic_light import Intersection
 from simulation.entities.road import Road, DynamicDivider
 from simulation.network import NetworkListener
 
 def main():
     pygame.init()
 
-    # Setup
-    screen = pygame.display.set_mode((config.get('WINDOW_WIDTH'), config.get('WINDOW_HEIGHT')))
-    pygame.display.set_caption("2D Traffic Simulation")
+    # --- Setup cơ bản ---
+    w = config.get('WINDOW_WIDTH')
+    h = config.get('WINDOW_HEIGHT')
+    screen = pygame.display.set_mode((w, h))
+    pygame.display.set_caption("2D Traffic Simulation (Static Map)")
     clock = pygame.time.Clock()
     
-    # Create simulation elements
-    controller = SimulationController(screen)
+    # --- Tạo các thành phần mô phỏng ---
     
-    intersections_coords = config.get('INTERSECTIONS')
-    traffic_lights = [TrafficLight(i, coords['x'], coords['y']) for i, coords in enumerate(intersections_coords)]
-    
-    # Simplified road setup
-    roads = [
-        Road(screen, "road_H1", (0, 270), (1920, 270)),
-        Road(screen, "road_H2", (0, 810), (1920, 810)),
-        Road(screen, "road_V1", (480, 0), (480, 1080)),
-        Road(screen, "road_V2", (1440, 0), (1440, 1080)),
-    ]
-    dynamic_dividers = {
-        "road_H1": DynamicDivider("road_H1"),
-        "road_H2": DynamicDivider("road_H2"),
-        "road_V1": DynamicDivider("road_V1"),
-        "road_V2": DynamicDivider("road_V2"),
+    # 1. Tính toán tọa độ tuyệt đối từ tọa độ tương đối trong config
+    relative_coords = config.get('INTERSECTION_COORDS_RELATIVE')
+    intersection_coords = [{'x': int(rc['x'] * w), 'y': int(rc['y'] * h)} for rc in relative_coords]
+
+    # 2. Tạo các con đường (Roads)
+    # 0 1
+    # 2 3
+    roads = {
+        "road_H1": Road(screen, "road_H1", (0, intersection_coords[0]['y']), (w, intersection_coords[0]['y']), num_lanes_per_direction=3),
+        "road_H2": Road(screen, "road_H2", (0, intersection_coords[2]['y']), (w, intersection_coords[2]['y']), num_lanes_per_direction=3),
+        "road_V1": Road(screen, "road_V1", (intersection_coords[0]['x'], 0), (intersection_coords[0]['x'], h), num_lanes_per_direction=3),
+        "road_V2": Road(screen, "road_V2", (intersection_coords[1]['x'], 0), (intersection_coords[1]['x'], h), num_lanes_per_direction=3),
     }
 
-    # Global state for network thread
+    # 3. Tạo các ngã tư (Intersections)
+    intersections = [Intersection(screen, i, (coords['x'], coords['y'])) for i, coords in enumerate(intersection_coords)]
+    
+    # 4. Tạo các dải phân cách động (hiện tại chỉ để nhận lệnh)
+    dynamic_dividers = {road_id: DynamicDivider(road_id) for road_id in roads.keys()}
+
+    # 5. Tạo bộ điều khiển (đã được vô hiệu hóa logic xe)
+    controller = SimulationController(screen, roads, intersections)
+    
+    # --- Thiết lập Global State và Network ---
     global_state = {
-        "traffic_lights": traffic_lights,
+        "intersections": intersections,
         "dynamic_dividers": dynamic_dividers
     }
-
-    # Start network listener
-    # Set use_mqtt=False to use UDP sockets instead
     network_listener = NetworkListener(global_state, use_mqtt=True) 
     network_listener.start()
 
+    # --- Vòng lặp chính ---
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-        # --- Game Logic ---
-        controller.spawn_vehicles(traffic_lights, dynamic_dividers)
-        controller.enforce_rules(traffic_lights, dynamic_dividers)
-        controller.update()
+        # --- Logic ---
+        # controller.spawn_vehicles() # Vô hiệu hóa
+        controller.enforce_rules() # Chỉ kiểm tra xe ra khỏi màn hình
+        controller.update() # Cập nhật di chuyển cho xe
 
-        # --- Drawing ---
+        # --- Chỉ vẽ các thành phần tĩnh ---
         screen.fill(config.get('COLORS')['BLACK'])
         
-        for road in roads:
+        for road in roads.values():
             road.draw()
+        
+        for intersection in intersections:
+            intersection.draw()
             
-        for light in traffic_lights:
-            light.draw(screen)
-            
-        controller.draw()
+        controller.draw() # Vẽ xe
 
         pygame.display.flip()
         clock.tick(config.get('FPS'))

@@ -1,64 +1,88 @@
 import pygame
 from simulation.config import config
+import math
 
 class Vehicle(pygame.sprite.Sprite):
-    def __init__(self, x, y, vehicle_type, direction, safe_distance=10):
+    """
+    Lớp Vehicle có khả năng nhận biết và dừng lại trước đèn đỏ.
+    """
+    def __init__(self, lane, speed=2):
         super().__init__()
-        self.vehicle_type = vehicle_type
-        if self.vehicle_type == 'car':
-            self.width = 40
-            self.height = 20
-            self.color = config.get('COLORS')['BLUE']
-        else: # motorbike
-            self.width = 20
-            self.height = 10
-            self.color = config.get('COLORS')['RED']
+        self.lane = lane
+        self.direction = lane.direction
+        self.default_speed = speed
+        self.speed = speed
+        self.safe_distance = 10 # Ngưỡng an toàn để dừng trước vạch
 
-        self.image = pygame.Surface([self.width, self.height])
-        self.image.fill(self.color)
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        
-        self.velocity = 5
-        self.direction = direction
-        self.safe_distance = safe_distance
-        self.stopped = False
+        # Thiết lập hình ảnh và rect
+        image_size = (15, 30) if self.direction in ['N', 'S'] else (30, 15)
+        self.image = pygame.Surface(image_size)
+        self.image.fill(config.get('COLORS')['BLUE'])
+        self.rect = self.image.get_rect(center=self.lane.start_pos)
+
+    @property
+    def front_position(self):
+        """Trả về tọa độ của mũi xe."""
+        if self.direction == 'E':
+            return self.rect.midright
+        if self.direction == 'W':
+            return self.rect.midleft
+        if self.direction == 'S':
+            return self.rect.midbottom
+        if self.direction == 'N':
+            return self.rect.midtop
+        return self.rect.center
+
+    def check_stop_conditions(self, intersections):
+        """
+        Kiểm tra xem có cần dừng lại vì đèn đỏ không.
+        Trả về True nếu cần dừng, False nếu không.
+        """
+        for stop_line_pos in self.lane.stop_line_positions:
+            # Tính khoảng cách từ mũi xe đến vạch dừng tiếp theo
+            dist_to_stop_line = math.hypot(
+                self.front_position[0] - stop_line_pos[0],
+                self.front_position[1] - stop_line_pos[1]
+            )
+
+            # Chỉ xét vạch dừng ở phía trước xe
+            in_front = False
+            if self.direction == 'E' and stop_line_pos[0] > self.front_position[0]: in_front = True
+            elif self.direction == 'W' and stop_line_pos[0] < self.front_position[0]: in_front = True
+            elif self.direction == 'S' and stop_line_pos[1] > self.front_position[1]: in_front = True
+            elif self.direction == 'N' and stop_line_pos[1] < self.front_position[1]: in_front = True
+
+            if in_front and dist_to_stop_line < self.safe_distance:
+                # Tìm ngã tư tương ứng với vạch dừng này
+                for intersection in intersections:
+                    if intersection.rect.collidepoint(stop_line_pos):
+                        # Lấy đèn cho làn của xe (đèn đi thẳng hoặc rẽ)
+                        # Tạm thời lấy đèn đầu tiên cho hướng này
+                        light = intersection.get_light_for_direction(self.direction)[0] 
+                        if light and light.state == 'RED':
+                            return True # Cần dừng lại
+        return False # Không cần dừng
 
     def move(self):
-        if not self.stopped:
-            if self.direction == 'N':
-                self.rect.y -= self.velocity
-            elif self.direction == 'S':
-                self.rect.y += self.velocity
-            elif self.direction == 'E':
-                self.rect.x += self.velocity
-            elif self.direction == 'W':
-                self.rect.x -= self.velocity
+        """Di chuyển xe thẳng theo hướng của nó."""
+        if self.direction == 'E':
+            self.rect.x += self.speed
+        elif self.direction == 'W':
+            self.rect.x -= self.speed
+        elif self.direction == 'S':
+            self.rect.y += self.speed
+        elif self.direction == 'N':
+            self.rect.y -= self.speed
+    
+    def update(self, intersections):
+        """Cập nhật trạng thái của xe."""
+        if self.check_stop_conditions(intersections):
+            self.speed = 0
+        else:
+            self.speed = self.default_speed
+        
+        self.move()
 
-    def stop(self):
-        self.stopped = True
-
-    def resume(self):
-        self.stopped = False
-
-    def check_collision_ahead(self, others):
-        for other in others:
-            if other is not self:
-                # Simple ahead check based on direction
-                if self.direction == 'N' and other.direction == 'N' and self.rect.y > other.rect.y:
-                    if self.rect.y - other.rect.y < self.safe_distance:
-                        return True
-                elif self.direction == 'S' and other.direction == 'S' and self.rect.y < other.rect.y:
-                    if other.rect.y - self.rect.y < self.safe_distance:
-                        return True
-                elif self.direction == 'E' and other.direction == 'E' and self.rect.x < other.rect.x:
-                    if other.rect.x - self.rect.x < self.safe_distance:
-                        return True
-                elif self.direction == 'W' and other.direction == 'W' and self.rect.x > other.rect.x:
-                    if self.rect.x - other.rect.x < self.safe_distance:
-                        return True
-        return False
-
-    def draw(self, screen):
-        screen.blit(self.image, self.rect)
+    def is_out_of_bounds(self, width, height):
+        """Kiểm tra xem xe đã ra khỏi màn hình chưa."""
+        return not pygame.Rect(0, 0, width, height).colliderect(self.rect)
