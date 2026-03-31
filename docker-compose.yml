@@ -1,0 +1,20 @@
+# File: docker-compose.yml
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18 # Sử dụng một phiên bản cụ thể để đảm bảo ổn định
+    container_name: mosquitto_broker
+    restart: unless-stopped
+    ports:
+      # Mở port 1883 của container ra port 1883 trên máy thật của bạn
+      - "1883:1883"
+      # Port 9001 cho giao thức WebSocket (nếu cần trong tương lai)
+      - "9001:9001"
+    volumes:
+      # Ánh xạ các thư mục bạn đã tạo vào trong container
+      # Docker sẽ tự tạo các thư mục này nếu chúng chưa tồn tại
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    command: "mosquitto -c /mosquitto/config/mosquitto.conf"

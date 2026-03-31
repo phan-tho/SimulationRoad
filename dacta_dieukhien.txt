@@ -1,0 +1,92 @@
+ĐẶC TẢ YÊU CẦU PHẦN MỀM: HỆ THỐNG ĐIỀU KHIỂN GIAO THÔNG TRUNG TÂM
+Phiên bản: 1.0
+Ngày: 31/03/2026
+
+1. Tổng quan và Mục đích
+Phần mềm này là bộ não của hệ thống mô phỏng, đóng vai trò là "Hệ thống Trung tâm". Nó có 3 nhiệm vụ chính:
+
+Thu thập Dữ liệu (Data Acquisition): Sử dụng camera vật lý và thuật toán xử lý ảnh (Computer Vision) để "nhìn" vào màn hình chạy mô phỏng Pygame, từ đó phát hiện, đếm và xác định vị trí của các phương tiện (khối màu).
+Phân tích & Ra quyết định (Analysis & Decision-Making): Dựa trên dữ liệu về mật độ và luồng xe thu thập được, hệ thống sẽ áp dụng các thuật toán điều khiển thông minh để quyết định thời điểm và cách thức thay đổi trạng thái đèn giao thông hoặc dịch chuyển dải phân cách.
+Thực thi Lệnh (Command Execution): Gửi các gói tin điều khiển (dưới dạng JSON) đến module mô phgỏng Pygame thông qua giao thức mạng (MQTT hoặc UDP) để thực thi các quyết định đã đưa ra.
+2. Kiến trúc Hệ thống & Các Module chính
+Hệ thống được thiết kế theo kiến trúc module hóa, sử dụng ngôn ngữ Python và các thư viện phổ biến như OpenCV, Paho-MQTT.
+
+2.1. Module Giao tiếp Camera (Camera Interface)
+
+Chức năng: Kết nối, cấu hình và nhận luồng hình ảnh (video stream) từ một camera vật lý.
+Thư viện đề xuất: OpenCV-Python.
+Yêu cầu chi tiết:
+Cho phép cấu hình ID của camera trong file config.json.
+Thiết lập độ phân giải và FPS cho luồng video để đồng bộ với mô phỏng.
+Phải có cơ chế xử lý lỗi (try-except) và tự động kết nối lại nếu luồng video bị gián đoạn.
+Cung cấp một phương thức get_frame() để các module khác có thể lấy khung hình mới nhất.
+2.2. Module Xử lý Ảnh (Computer Vision Engine)
+
+Chức năng: Phân tích từng khung hình nhận được từ Module Camera để định vị và phân loại các phương tiện.
+Thư viện đề xuất: OpenCV-Python, NumPy.
+Luồng xử lý (Pipeline):
+Tiền xử lý: Áp dụng các bộ lọc làm mờ (Gaussian Blur) để giảm nhiễu nếu cần.
+Chuyển đổi không gian màu: Chuyển khung hình từ BGR sang HSV để việc lọc màu trở nên chính xác và ổn định hơn dưới các điều kiện ánh sáng khác nhau.
+Phân vùng theo màu sắc:
+Sử dụng hàm cv2.inRange() với các dải màu HSV đã được định nghĩa trước (ví dụ: dải màu đỏ cho xe máy, dải màu xanh cho ô tô) để tạo ra các mặt nạ (masks) nhị phân riêng biệt cho từng loại xe.
+Tìm và lọc đối tượng:
+Sử dụng cv2.findContours() trên từng mặt nạ để xác định các vùng màu liên thông.
+Lọc các contour dựa trên diện tích (cv2.contourArea) để loại bỏ các chấm nhiễu nhỏ.
+Trích xuất thông tin: Với mỗi contour hợp lệ, tính toán tọa độ tâm (cv2.moments) và vẽ một hình chữ nhật bao quanh (cv2.boundingRect).
+Đầu ra: Module này trả về một cấu trúc dữ liệu (ví dụ: list of dictionaries) chứa thông tin của tất cả các xe được phát hiện trong khung hình, bao gồm: {'type': 'car', 'x': 150, 'y': 300}.
+2.3. Module Phân tích và Điều khiển (Control Logic Engine)
+
+Chức năng: Đây là module cốt lõi, chứa thuật toán thông minh để ra quyết định.
+Luồng hoạt động:
+Định nghĩa Vùng quan tâm (Regions of Interest - ROI): Chia màn hình thành các vùng logic tương ứng với các làn đường, các hướng tiếp cận ngã tư. Ví dụ: "vùng đếm xe làn Bắc-Nam tại ngã tư 1".
+Tổng hợp dữ liệu: Nhận danh sách xe từ Module Xử lý Ảnh, đếm số lượng xe trong từng ROI đã định nghĩa để xác định mật độ giao thông.
+Áp dụng Thuật toán:
+Điều khiển Đèn giao thông:
+Logic cơ bản: Dựa trên chênh lệch mật độ. Nếu số xe ở hướng Đông-Tây > số xe ở hướng Bắc-Nam một ngưỡng nhất định, ưu tiên cấp đèn xanh cho hướng Đông-Tây.
+Logic nâng cao (Tùy chọn): Cân nhắc thời gian chờ của luồng xe đang đèn đỏ. Nếu một luồng đã chờ quá lâu, nó sẽ được tăng độ ưu tiên.
+Điều khiển Dải phân cách động:
+Kích hoạt khi có sự chênh lệch mật độ rất lớn và kéo dài giữa hai chiều của cùng một trục đường (ví dụ: 80% xe đi từ Đông sang Tây, chỉ 20% đi ngược lại).
+Hệ thống sẽ tính toán tỷ lệ làn đường tối ưu (ví dụ: 3:1) và gửi lệnh thay đổi.
+Tạo Lệnh: Dựa trên quyết định, module sẽ tạo ra chuỗi JSON lệnh tương ứng.
+2.4. Module Giao tiếp Mạng (Network Emitter)
+
+Chức năng: Gửi các chuỗi JSON lệnh đến Module Mô phỏng Pygame.
+Thư viện đề xuất: paho-mqtt.
+Yêu cầu chi tiết:
+Hoạt động như một MQTT Client.
+Cấu hình địa chỉ Broker, Port và Topic (local/simulation/control) trong file config.json.
+Cung cấp một phương thức publish_command(payload) để Module Điều khiển có thể gọi và gửi lệnh đi.
+Đảm bảo kết nối ổn định và có khả năng tự động kết nối lại.
+3. Định dạng Gói tin (Payload Specification)
+Hệ thống sẽ giao tiếp bằng chuỗi JSON được publish lên MQTT topic.
+
+Lệnh đổi đèn: ví dụ
+"""
+{
+  "type": "traffic_light",
+  "intersection_id": 1,
+  "state": {"N-S": "GREEN", "E-W": "RED"}
+}
+"""
+Lệnh đổi làn: ví dụ
+"""
+{
+  "type": "lane_shift",
+  "road_id": "road_A",
+  "shift_direction": "left",
+  "ratio": "3:1"
+}
+"""
+4. Luồng hoạt động tổng thể (Workflow)
+Khởi động: Hệ thống đọc file config.json, khởi tạo các module, kết nối camera và MQTT broker.
+Vòng lặp chính:
+a. Lấy khung hình mới nhất từ Module Camera.
+b. Đưa khung hình vào Module Xử lý Ảnh để nhận về danh sách các xe và vị trí của chúng.
+c. Cung cấp dữ liệu xe cho Module Điều khiển.
+d. Module Điều khiển phân tích mật độ, so sánh với trạng thái hiện tại và ra quyết định (nếu cần thay đổi).
+e. Nếu có quyết định mới, Module Điều khiển tạo chuỗi JSON lệnh và yêu cầu Module Mạng gửi đi.
+f. Lặp lại liên tục.
+5. Yêu cầu Phi chức năng
+Hiệu năng: Toàn bộ chu trình từ lúc nhận ảnh đến lúc gửi lệnh phải có độ trễ thấp (dưới 500ms) để đảm bảo hệ thống phản ứng nhanh với sự thay đổi của giao thông.
+Độ tin cậy: Hệ thống phải hoạt động ổn định trong thời gian dài, có cơ chế xử lý lỗi và tự phục hồi khi có sự cố kết nối (camera, MQTT).
+Khả năng cấu hình: Hầu hết các tham số quan trọng (ID camera, địa chỉ MQTT, dải màu HSV, ngưỡng mật độ, diện tích contour tối thiểu/tối đa) phải có thể cấu hình qua file config.json mà không cần sửa code.

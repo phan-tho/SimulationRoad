@@ -1,0 +1,119 @@
+
+ĐẶC TẢ YÊU CẦU PHẦN MỀM: MODULE MÔ PHỎNG VI MÔ 2D (PYGAME)
+
+1. Mục đích sử dụng (Purpose)
+Phần mềm này là một công cụ giả lập môi trường giao thông 2D (Micro-simulation) dành cho 4 ngã tư. Nó có 3 mục đích cốt lõi:
+
+Làm "mục tiêu quang học" (Optical Target): Hiển thị các luồng xe cộ dưới dạng các khối màu có độ tương phản cực cao trên màn hình máy tính, tạo điều kiện lý tưởng (không nhiễu) cho Camera vật lý soi vào và thuật toán Computer Vision bóc tách vật thể.
+
+Mô phỏng vật lý: Xử lý logic sinh xe (spawning), di chuyển (kinematics), tránh va chạm (collision avoidance) và tuân thủ tín hiệu đèn giao thông trong môi trường ảo.
+
+Thực thi lệnh (Actuator Proxy): Hoạt động như một thiết bị IoT (Slave). Nó lắng nghe các quyết định điều khiển (chuyển đèn, dịch chuyển dải phân cách) từ Hệ thống Trung tâm và thay đổi trạng thái ngay lập tức trên màn hình, đồng bộ hoàn toàn với sa bàn vật lý bên ngoài.
+
+2. Giải pháp Đồng bộ Tín hiệu (The Crucial Mechanism)
+Để Pygame nhận lệnh từ Hệ thống Trung tâm (nơi chạy thuật toán xử lý ảnh và ra quyết định), phần mềm sẽ sử dụng Luồng giao tiếp độc lập (Background Network Thread).
+
+Cơ chế: Pygame sẽ tích hợp một MQTT Client (hoặc Local UDP Socket). Nó sẽ liên tục lắng nghe (Subscribe) một Topic, ví dụ: local/simulation/control.
+
+Định dạng gói tin (Payload): Hệ thống Trung tâm khi muốn đổi đèn sẽ gửi một chuỗi JSON.
+
+Ví dụ lệnh đổi đèn: {"type": "traffic_light", "intersection_id": 1, "state": {"N-S": "GREEN", "E-W": "RED"}}
+
+Ví dụ lệnh đổi làn: {"type": "lane_shift", "road_id": "road_A", "shift_direction": "left", "ratio": "3:1"}
+
+Xử lý trong Pygame: Khi Thread mạng nhận được chuỗi JSON này, nó sẽ cập nhật vào một biến Global State. Vòng lặp chính (Main Loop) của Pygame mỗi khung hình (frame) sẽ đọc biến này và vẽ lại màu đèn hoặc cập nhật tọa độ ranh giới làn đường. Xe cộ tự động tuân theo trạng thái mới này.
+
+3. Kiến trúc Hệ thống & Các Module chính
+Hệ thống cần được thiết kế theo hướng Hướng đối tượng (OOP) để dễ dàng custom và scale. Bao gồm 4 Module lõi:
+
+3.1. Module Cấu hình (Configuration Manager)
+
+Chức năng: Đọc file config.json lúc khởi động để thiết lập toàn bộ thông số mà không cần sửa code.
+
+Các thông số cần có:
+
+Kích thước cửa sổ (Resolution), số khung hình trên giây (FPS).
+
+Bảng màu (Màu nền đen mã #000000, màu xe máy đỏ #FF0000, xe ô tô xanh #00FF00...).
+
+Tọa độ tâm của 4 ngã tư (x,y).
+
+Tốc độ sinh xe (Spawning rate) cho từng hướng.
+
+3.2. Module Đối tượng Giao thông (Traffic Entities)
+
+Bao gồm các Class xử lý vật lý và hiển thị:
+
+Class Vehicle:
+
+Thuộc tính: Tọa độ (x,y), Vận tốc (v), Kích thước (dài, rộng), Loại xe (Ô tô/Xe máy), Hướng di chuyển (Vector), Khoảng cách an toàn (Safe distance).
+
+Phương thức: move() (cập nhật tọa độ), stop(), check_collision_ahead() (phát hiện xe phía trước để phanh).
+
+Class TrafficLight:
+
+Thuộc tính: ID ngã tư, Vị trí (x,y), Trạng thái hiện tại (Đỏ/Vàng/Xanh).
+
+Phương thức: draw() (vẽ lên màn hình), update_state(new_state) (nhận lệnh từ mạng đổi màu).
+
+Class Road & DynamicDivider (Đường và Dải phân cách động):
+
+Thuộc tính: Tọa độ các làn đường, Ranh giới dải phân cách (tọa độ x hoặc y của đường thẳng chia làn).
+
+Phương thức: shift_divider(offset) (Dịch chuyển ranh giới sang trái/phải). Khi ranh giới này thay đổi, các Vehicle mới sinh ra sẽ tự động điều chỉnh tọa độ tâm làn đường của chúng.
+
+3.3. Module Điều phối Logic (Simulation Controller)
+
+Đây là "người quản lý" của Pygame.
+
+Chức năng:
+
+spawn_vehicles(): Tạo xe mới ở rìa màn hình theo tỷ lệ cấu hình, gán chúng vào các làn đường đang mở.
+
+enforce_rules(): Kiểm tra nếu xe đến gần vạch dừng (Stop line) mà đèn đang Đỏ/Vàng thì gọi hàm stop() của xe đó. Nếu dải phân cách đang dịch chuyển, không cho xe đi vào làn bị đóng.
+
+Lưu ý quan trọng: Module này KHÔNG chứa logic đếm giờ (ví dụ: không có lệnh if time > 30s thì đổi đèn). Nó chỉ kiểm tra xe và trạng thái đèn hiện tại để ép xe dừng/chạy.
+
+3.4. Module Render & Network (Hiển thị & Giao tiếp)
+
+Network_Listener: Chạy trên một Thread riêng, nhận tín hiệu JSON từ Hệ thống Trung tâm, Parse JSON và đè (override) lên trạng thái của TrafficLight và DynamicDivider.
+
+Main_Render_Loop: Vòng lặp while True cơ bản của Pygame.
+
+Xóa màn hình (tô đen).
+
+Vẽ đường và dải phân cách (Tĩnh + Động).
+
+Vẽ Đèn giao thông.
+
+Gọi hàm move() và vẽ tất cả Vehicle.
+
+Update display.
+
+4. Đặc tả luồng hoạt động (Workflow)
+Khởi động: Pygame đọc config.json, vẽ 4 ngã tư, thiết lập dải phân cách ở giữa (tỷ lệ làn 2:2), kết nối MQTT/Socket. Đèn mặc định Đỏ toàn bộ.
+
+Chờ lệnh: Pygame nhận lệnh ban đầu từ Hệ thống Trung tâm (ví dụ: Cấp đèn xanh hướng Đông-Tây).
+
+Vận hành:
+
+Xe tự động sinh ra, chạy theo làn.
+
+Camera vật lý soi vào màn hình, nhận diện khối màu, gửi số lượng xe về Hệ thống Trung tâm.
+
+Kích hoạt Dải phân cách động (Giờ cao điểm):
+
+Hệ thống Trung tâm phát hiện mật độ từ Đông sang Tây quá đông.
+
+Hệ thống Trung tâm gửi JSON: {"type": "lane_shift", "ratio": "3:1"}.
+
+Pygame nhận JSON, dịch chuyển nét vẽ dải phân cách trên màn hình. Các xe hướng Đông-Tây bắt đầu sinh ra ở 3 làn, hướng Tây-Đông bị ép vào 1 làn.
+
+Kích hoạt Đèn:
+
+Hệ thống Trung tâm gửi lệnh đổi đèn, Pygame vẽ lại màu, xe đến vạch tự động phanh lại.
+
+5. Yêu cầu Phi chức năng (Non-Functional Requirements)
+Hiệu năng: Khung hình phải duy trì ổn định ở FPS≥60 để Camera vật lý soi vào không bị giật, tránh sai lệch khi tracking vận tốc xe.
+
+Thị giác (Vision-optimized): Bắt buộc không dùng các texture (hình ảnh xe cộ thực tế). Chỉ dùng các khối hình học học (Rect, Circle) lấp đầy màu (Fill) có độ tương phản tuyệt đối. Tắt toàn bộ hiệu ứng khử răng cưa (Anti-aliasing) trên viền xe nếu có thể để rìa vật thể sắc nét nhất cho Camera.
