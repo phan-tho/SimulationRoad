@@ -1,0 +1,41 @@
+Tại sao lại có folder này? 
+    Code này dùng để demo phần cứng, còn demo cả thành phố thì dùng SUMO
+Tại sao không dùng SUMO demo cái nhỏ này luôn?
+    SUMO giao diện khó nhìn (có vỉa hè, xe màu không tương phản, khó custom hơn, nặng hơn, ...)
+    ==> Phần mềm này: 
+        + màu sắc dễ nhìn (camera khó khăn ở đâu thì code này khắc phục ở đấy luôn)
+        + custom mọi thứ
+        + Kết nối với camera, controller dễ
+
+Dưới có cách cài thư viện và cách chạy + giải thích sơ qua
+Nếu file này có gì thiếu sót, khó hiểu. Đề nghị người đọc bổ sung, góp ý, commit
+
+Set up thư viện: 
+    - Tải Pygame vs MQTT: 
+        Chạy lệnh: pip install pygame paho-mqtt
+
+    - Tải mosquitto, Lên mạng tra máy win tải như nào. 
+        Nếu tải giống t chắc chắn chạy được nhưng lâu hơn tí
+        Cách của t: Lên mạng tải OrbStack về rồi bật lên
+        vào terminal chạy (lần đầu): docker-compose up --build -d
+        Lần sau chạy chỉ cần gõ: docker-compose start
+        Code chán chê xong lúc tắt gõ: docker-compose stop (hoặc vào OrbStack ấn dừng container)
+
+Chạy code: Bật 2 terminal (riêng biệt)
+    - terminal 1 gõ: python main.py
+    - terminal 2 gõ: python simple_controller.py
+
+Logic:
+    main.py với folder simulation không quan tâm, chỉ cần biết là nó
+    lắng nghe chỉ đạo của cái thằng simple_controller
+
+    Thằng simple_controller sẽ gửi tín hiệu ra không khí (hiểu nôm na là thế)
+    rồi thằng main sẽ bắt cái tín hiệu đấy, mấy cái đèn đỏ nghe theo tín hiệu đấy
+    Thằng main còn có nhiệm vụ nữa là xử lý logic mấy cái xe
+
+    Tóm lại: Cần quan tâm logic điều khiển => Yêu cầu đọc hiểu file simple_controller
+
+Note: 
+    + file dacta_4ngatu.txt: đặc tả của cái giao diện và logic mấy cái xe
+    + file dacta_dieukhien.txt: yêu cầu và hướng dẫn cho phần mềm điều khiển 
+        (cần đọc qua để sau biết cần code điều khiển như nào, plug in cái demo như nào)
