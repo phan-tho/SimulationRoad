@@ -2,6 +2,15 @@
     "WINDOW_WIDTH": 1280,
     "WINDOW_HEIGHT": 720,
     "FPS": 60,
+    "SIMULATION_SEED": 42,
+    "SPAWN_INTERVAL_SECONDS": 0.8,
+    "MAX_VEHICLES": 40,
+    "SPAWN_MIN_GAP": 24,
+    "ROUTE_PROBABILITIES": {
+        "straight": 0.4,
+        "left": 0.3,
+        "right": 0.3
+    },
     "COLORS": {
         "BLACK": [0, 0, 0],
         "WHITE": [255, 255, 255],

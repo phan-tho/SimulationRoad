@@ -17,11 +17,14 @@ def draw_dashed_line(surface, color, start_pos, end_pos, width=1, dash_length=10
 
 class Lane:
     """Đại diện cho một làn đường duy nhất."""
-    def __init__(self, start_pos, end_pos, direction, stop_line_positions):
+    def __init__(self, start_pos, end_pos, direction, stop_line_positions, lane_index=None, road_id=None, lanes_per_direction=3):
         self.start_pos = start_pos
         self.end_pos = end_pos
         self.direction = direction
         self.stop_line_positions = stop_line_positions # Đây giờ là một danh sách
+        self.lane_index = lane_index
+        self.road_id = road_id
+        self.lanes_per_direction = lanes_per_direction
 
 class Road:
     """Đại diện cho một con đường, chứa nhiều làn đường."""
@@ -58,14 +61,34 @@ class Road:
             for i in range(self.num_lanes_per_direction):
                 y = center_y + (i * self.lane_width) + self.lane_width / 2
                 current_lane_stop_positions = [(pos[0], y) for pos in stop_positions_e]
-                lanes['E'].append(Lane((self.start[0], y), (self.end[0], y), 'E', current_lane_stop_positions))
+                lanes['E'].append(
+                    Lane(
+                        (self.start[0], y),
+                        (self.end[0], y),
+                        'E',
+                        current_lane_stop_positions,
+                        lane_index=i,
+                        road_id=self.road_id,
+                        lanes_per_direction=self.num_lanes_per_direction,
+                    )
+                )
 
             # Làn đi về hướng TÂY (W) - từ phải sang trái, dừng TRƯỚC các ngã tư
             stop_positions_w = [(ic['x'] + stop_line_margin, center_y) for ic in relevant_intersections]
             for i in range(self.num_lanes_per_direction):
                 y = center_y - (i * self.lane_width) - self.lane_width / 2
                 current_lane_stop_positions = [(pos[0], y) for pos in stop_positions_w]
-                lanes['W'].append(Lane((self.end[0], y), (self.start[0], y), 'W', current_lane_stop_positions))
+                lanes['W'].append(
+                    Lane(
+                        (self.end[0], y),
+                        (self.start[0], y),
+                        'W',
+                        current_lane_stop_positions,
+                        lane_index=i,
+                        road_id=self.road_id,
+                        lanes_per_direction=self.num_lanes_per_direction,
+                    )
+                )
         else: # Vertical
             center_x = self.start[0]
             relevant_intersections = sorted([ic for ic in all_intersections if ic['x'] == center_x], key=lambda item: item['y'])
@@ -76,7 +99,17 @@ class Road:
             for i in range(self.num_lanes_per_direction):
                 x = center_x - (i * self.lane_width) - self.lane_width / 2
                 current_lane_stop_positions = [(x, pos[1]) for pos in stop_positions_s]
-                lanes['S'].append(Lane((x, self.start[1]), (x, self.end[1]), 'S', current_lane_stop_positions))
+                lanes['S'].append(
+                    Lane(
+                        (x, self.start[1]),
+                        (x, self.end[1]),
+                        'S',
+                        current_lane_stop_positions,
+                        lane_index=i,
+                        road_id=self.road_id,
+                        lanes_per_direction=self.num_lanes_per_direction,
+                    )
+                )
 
             # Làn đi về hướng BẮC (N) - từ dưới lên trên, dừng TRƯỚC các ngã tư
             # Các làn này nằm ở BÊN TRÁI của đường (x < center_x)
@@ -84,7 +117,17 @@ class Road:
             for i in range(self.num_lanes_per_direction):
                 x = center_x + (i * self.lane_width) + self.lane_width / 2
                 current_lane_stop_positions = [(x, pos[1]) for pos in stop_positions_n]
-                lanes['N'].append(Lane((x, self.end[1]), (x, self.start[1]), 'N', current_lane_stop_positions))
+                lanes['N'].append(
+                    Lane(
+                        (x, self.end[1]),
+                        (x, self.start[1]),
+                        'N',
+                        current_lane_stop_positions,
+                        lane_index=i,
+                        road_id=self.road_id,
+                        lanes_per_direction=self.num_lanes_per_direction,
+                    )
+                )
         return lanes
 
     def draw(self):
@@ -139,7 +182,7 @@ class Road:
                     else: # Vertical
                         start_pos = (lane.start_pos[0] - self.lane_width / 2, stop_pos[1])
                         end_pos = (lane.start_pos[0] + self.lane_width / 2, stop_pos[1])
-                        pygame.draw.line(self.screen, config.get('COLORS')['WHITE'], start_pos, end_pos, 2)
+                        pygame.draw.line(self.screen, config.get('COLORS')['WHITE'], start_pos, end_pos, 3)
 
     def get_spawn_lanes(self, direction):
         """Lấy các làn đường phù hợp để sinh xe dựa trên hướng."""

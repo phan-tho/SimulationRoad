@@ -4,6 +4,7 @@ from simulation.controller import SimulationController
 from simulation.entities.traffic_light import Intersection
 from simulation.entities.road import Road, DynamicDivider
 from simulation.network import NetworkListener
+from simulation.state import SimulationState
 
 def main():
     pygame.init()
@@ -37,8 +38,15 @@ def main():
     # 4. Tạo các dải phân cách động (hiện tại chỉ để nhận lệnh)
     dynamic_dividers = {road_id: DynamicDivider(road_id) for road_id in roads.keys()}
 
+    sim_state = SimulationState(
+        lights=intersections,
+        roads=roads,
+        vehicles=None,
+        rng_seed=config.get("SIMULATION_SEED", 42),
+    )
+
     # 5. Tạo bộ điều khiển (đã được vô hiệu hóa logic xe)
-    controller = SimulationController(screen, roads, intersections)
+    controller = SimulationController(screen, roads, intersections, state=sim_state)
     
     # --- Thiết lập Global State và Network ---
     global_state = {
@@ -57,8 +65,8 @@ def main():
 
         # --- Logic ---
         # controller.spawn_vehicles() # Vô hiệu hóa
-        controller.enforce_rules() # Chỉ kiểm tra xe ra khỏi màn hình
-        controller.update() # Cập nhật di chuyển cho xe
+        dt_seconds = clock.get_time() / 1000.0
+        controller.update(dt_seconds) # Cập nhật theo pipeline 4 pha
 
         # --- Chỉ vẽ các thành phần tĩnh ---
         screen.fill(config.get('COLORS')['BLACK'])
